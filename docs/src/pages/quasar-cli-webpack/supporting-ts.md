@@ -14,13 +14,14 @@ The following steps are only required when you **have not** selected TypeScript 
 
 ## Installation of TypeScript Support
 
-In order to support TypeScript, you'll need to change the extension of your quasar.config file: `/quasar.config.ts` (notice the `.ts` ending):
+In order to support TypeScript, you'll need to change the extension of your quasar.config file: `/quasar.config` file:
 
 ```js
 import { configure } from "quasar/wrappers";
 
-export default configure((ctx) => {
+module.exports = configure((ctx) => {
   return {
+    supportTS: true,
     // ...
   }
 });
@@ -49,18 +50,18 @@ If you fail to add the `tsconfig.json` file, the application will break at compi
 
 ## Handling TS Webpack loaders <q-badge label="@quasar/app-webpack v4+" />
 
-Behind the curtains, Quasar uses `ts-loader` and `fork-ts-checker-webpack-plugin` (provided by `@quasar/app-webpack` package) to manage TS files. If you ever need to provide a custom configuration for these libs you can do so by making `supportTS` property like so:
+Behind the curtains, Quasar uses `ts-loader` and `fork-ts-checker-webpack-plugin` (provided by `@quasar/app-webpack` package) to manage TS files. If you ever need to provide a custom configuration for these libs you can do so by making `build` property like so:
 
 ```js
 // quasar.config file
-export default function (ctx) {
+module.exports = function (ctx) {
   return {
-    build: {
-      tsLoaderOptions: {
+    supportTS: {
+      tsLoaderConfig: {
         // `appendTsSuffixTo: [/\.vue$/]` and `transpileOnly: true` are added by default and cannot be overridden
         ...
       },
-      tsCheckerOptions: {
+      tsCheckerConfig: {
         // `vue: true` is added by default and cannot be overridden
         ...
       }
@@ -161,10 +162,10 @@ If you setup TypeScript linting and want `fork-ts-checker-webpack-plugin` (provi
 
 ```js
 // quasar.config file
-export default function (ctx) {
+module.exports = function (ctx) {
   return {
-    build: {
-      tsCheckerOptions: {
+    supportTS: {
+      tsCheckerConfig: {
         eslint: {
           enabled: true,
           files: './src/**/*.{ts,tsx,js,jsx,vue}'

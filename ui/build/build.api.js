@@ -37,7 +37,7 @@ function getMixedInAPI (api, mainFile) {
 }
 
 const topSections = {
-  plugin: [ 'meta', 'injection', 'quasarConfOptions', 'addedIn', 'props', 'methods' ],
+  plugin: [ 'meta', 'injection', 'quasarConfOptions', 'addedIn', 'props', 'methods', 'internal' ],
   component: [ 'meta', 'quasarConfOptions', 'addedIn', 'props', 'slots', 'events', 'methods', 'computedProps' ],
   directive: [ 'meta', 'quasarConfOptions', 'addedIn', 'value', 'arg', 'modifiers' ]
 }
@@ -53,7 +53,7 @@ const objectTypes = {
   },
 
   String: {
-    props: [ 'tsInjectionPoint', 'desc', 'required', 'reactive', 'sync', 'syncable', 'link', 'values', 'default', 'examples', 'category', 'addedIn', 'transformAssetUrls', 'internal' ],
+    props: [ 'tsInjectionPoint', 'tsType', 'desc', 'required', 'reactive', 'sync', 'syncable', 'link', 'values', 'default', 'examples', 'category', 'addedIn', 'transformAssetUrls', 'internal' ],
     required: [ 'desc' ],
     isBoolean: [ 'tsInjectionPoint', 'required', 'reactive', 'sync', 'syncable', 'transformAssetUrls', 'internal' ],
     isArray: [ 'examples', 'values' ]
@@ -145,8 +145,10 @@ const objectTypes = {
   },
 
   quasarConfOptions: {
-    props: [ 'propName', 'definition', 'link', 'addedIn' ],
-    required: [ 'propName', 'definition' ]
+    props: [ 'propName', 'definition', 'values', 'tsType', 'desc', 'examples', 'link', 'addedIn' ],
+    required: [ 'propName' ],
+    isObject: [ 'definition' ],
+    isArray: [ 'values' ]
   }
 }
 
@@ -174,7 +176,7 @@ function isClassStyleType (type) {
   return hits === 3
 }
 
-const serializableTypes = [ 'Boolean', 'Number', 'String', 'Array', 'Object' ]
+const serializableTypes = [ 'Any', 'Boolean', 'Number', 'String', 'Array', 'Object' ]
 function isSerializable (value) {
   const types = Array.isArray(value.type) ? value.type : [ value.type ]
 
@@ -703,7 +705,11 @@ module.exports.generate = function () {
   return new Promise((resolve) => {
     const list = []
 
-    const plugins = glob.sync(resolvePath('src/plugins/*.json'))
+    const plugins = [
+      ...glob.sync(resolvePath('src/plugins/*.json')),
+      resolvePath('src/Brand.json'),
+      resolvePath('src/Lang.json')
+    ]
       .filter(file => !path.basename(file).startsWith('__'))
       .map(fillAPI('plugin', list))
 

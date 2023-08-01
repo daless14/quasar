@@ -1,5 +1,6 @@
 import { QuasarAnimations, QuasarFonts, QuasarIconSets } from "quasar";
 import { Configuration as WebpackDevServerConfiguration } from "webpack-dev-server";
+import { Options as OpenOptions } from "open";
 import { QuasarBootConfiguration } from "./boot";
 import { QuasarBuildConfiguration } from "./build";
 import { QuasarCapacitorConfiguration } from "./capacitor-conf";
@@ -8,21 +9,18 @@ import { QuasarElectronConfiguration } from "./electron-conf";
 import { QuasarFrameworkConfiguration } from "./framework-conf";
 import { QuasarPwaConfiguration } from "./pwa-conf";
 import { QuasarSsrConfiguration } from "./ssr-conf";
+import { QuasarMobileConfiguration } from "./mobile-conf";
 
 type QuasarAnimationsConfiguration = "all" | QuasarAnimations[];
 
 interface QuasarDevServerConfiguration
   extends Omit<WebpackDevServerConfiguration, "open"> {
+  open?: Omit<OpenOptions, "wait"> | boolean;
+
   /**
-   * Behind the scenes, webpack devServer `open` property is always set to false
-   *  and that feature is delegated to `open` library.
-   * When a string is provided, it's used as if it was `open.Options.app` value
-   *  to define which browser must be open.
-   *
-   * @link https://github.com/sindresorhus/open/blob/ed757758dd556ae561b58b80ec7dee5e7c6ffddc/test.js#L10-L21
-   * @link https://github.com/sindresorhus/open/blob/ed757758dd556ae561b58b80ec7dee5e7c6ffddc/index.d.ts#L26-L33
+   * Automatically open remote Vue Devtools when running in development mode.
    */
-  open: boolean | string;
+  vueDevtools?: boolean;
 }
 
 /**
@@ -37,11 +35,11 @@ interface QuasarDevServerConfiguration
  *  store: 'src/stores/index', // for Pinia
  *  // store: 'src/store/index' // for Vuex
  *  indexHtmlTemplate: 'src/index.template.html',
- *  registerServiceWorker: 'src-pwa/register-service-worker',
- *  serviceWorker: 'src-pwa/custom-service-worker',
+ *  pwaRegisterServiceWorker: 'src-pwa/register-service-worker',
+ *  pwaServiceWorker: 'src-pwa/custom-service-worker',
+ *  pwaManifestFile: 'src-pwa/manifest.json',
  *  electronMain: 'src-electron/electron-main',
  *  electronPreload: 'src-electron/electron-preload'
- *  ssrServerIndex: 'src-ssr/index.js'
  * }
  * ```
  */
@@ -50,11 +48,11 @@ interface QuasarSourceFilesConfiguration {
   router?: string;
   store?: string;
   indexHtmlTemplate?: string;
-  registerServiceWorker?: string;
-  serviceWorker?: string;
+  pwaRegisterServiceWorker?: string;
+  pwaServiceWorker?: string;
+  pwaManifestFile?: string;
   electronMain?: string;
   electronPreload?: string;
-  ssrServerIndex?: string;
 }
 
 interface BaseQuasarConfiguration {
@@ -107,7 +105,7 @@ export interface QuasarHookParams {
   quasarConf: QuasarConf;
 }
 
-export type QuasarConf = BaseQuasarConfiguration & {
+export type QuasarConf = BaseQuasarConfiguration & QuasarMobileConfiguration & {
   /** PWA specific [config](/quasar-cli/developing-pwa/configuring-pwa). */
   pwa?: QuasarPwaConfiguration;
 } & {

@@ -62,7 +62,7 @@ import { ref, reactive, computed, inject } from 'vue'
 import { fabGithub, fabCodepen } from '@quasar/extras/fontawesome-v6'
 import { mdiCompare } from '@quasar/extras/mdi-v7'
 
-import { useDocStore } from 'src/layouts/doc-layout/store'
+import { useDocStore } from 'src/layouts/doc-layout/store/index.js'
 
 import DocCode from './DocCode.vue'
 import DocCodepen from './DocCodepen.vue'
@@ -139,13 +139,13 @@ process.env.CLIENT && onMounted(() => {
   examples.list.then(list => {
     component.value = markRaw(
       process.env.DEV
-        ? list.code[ `./src/examples/${ examples.name }/${ props.file }.vue` ].default
+        ? list.code[ `/src/examples/${ examples.name }/${ props.file }.vue` ].default
         : list[ props.file ]
     )
 
     parseComponent(
       process.env.DEV
-        ? list.source[ `./src/examples/${ examples.name }/${ props.file }.vue` ]
+        ? list.source[ `/src/examples/${ examples.name }/${ props.file }.vue` ]
         : list[ `Raw${ props.file }` ]
     )
 

@@ -104,7 +104,8 @@ function getTypeVal (def) {
 function getPropDefinition ({ name, definition, docs = true, isMethodParam = false, isCompProps = false, escapeName = true, isReadonly = false }) {
   let propName = escapeName ? toCamelCase(name) : name
 
-  if (propName.startsWith('...')) {
+  const isRestParam = propName.startsWith('...')
+  if (isRestParam) {
     if (isMethodParam) {
       // A rest parameter must be of an array type. e.g. '...params: any[]'
       definition.type = 'Array'
@@ -113,8 +114,10 @@ function getPropDefinition ({ name, definition, docs = true, isMethodParam = fal
     }
     else {
       propName = `[${ propName.replace('...', '') || 'key' }: string]`
-      // Optionality with index signature types works differently and use of '?:' is invalid and not required, so always mark it as required
-      definition.required = true
+      // Optionality with index signature types works differently and use of '?:' is invalid and not required.
+      // So, we have to not use '?:' for index signature types but use '| undefined' for the property type instead.
+      // e.g. '[key: string]: any | undefined'
+      // It's being handled in the return statement on the bottom of this function.
     }
   }
 
@@ -122,14 +125,16 @@ function getPropDefinition ({ name, definition, docs = true, isMethodParam = fal
 
   let propType = getTypeVal(definition)
 
-  if (isCompProps === true && name !== 'model-value' && !definition.required && propType.indexOf(' undefined') === -1) {
+  if ((isCompProps === true || isRestParam) && name !== 'model-value' && !definition.required && propType.indexOf(' undefined') === -1) {
     propType += ' | undefined;'
   }
 
   let jsDoc = ''
 
   if (docs) {
-    jsDoc += `/**\n * ${ definition.desc }\n`
+    if (definition.desc) {
+      jsDoc += ` * ${ definition.desc }\n`
+    }
 
     if (definition.default) {
       jsDoc += ` * Default value: ${ definition.default }\n`
@@ -144,10 +149,12 @@ function getPropDefinition ({ name, definition, docs = true, isMethodParam = fal
       jsDoc += ` * @returns ${ returns.desc }\n`
     }
 
-    jsDoc += ' */\n'
+    if (jsDoc.length > 0) {
+      jsDoc = '/**\n' + jsDoc + ' */\n'
+    }
   }
 
-  return `${ jsDoc }${ isReadonly ? 'readonly ' : '' }${ propName }${ !definition.required ? '?' : '' }: ${ propType }`
+  return `${ jsDoc }${ isReadonly ? 'readonly ' : '' }${ propName }${ !definition.required && !isRestParam ? '?' : '' }: ${ propType }`
 }
 
 function getPropDefinitions ({ definitions, docs = true, areMethodParams = false, isCompProps = false }) {
@@ -290,7 +297,7 @@ function getIndexDts (apis) {
   writeLine(headerContents, '/// <reference types="@quasar/app-vite" />')
 
   // ----
-  writeLine(contents, 'import { App, Component, ComponentPublicInstance, VNode } from \'vue\'')
+  writeLine(contents, 'import { App, Component, ComponentPublicInstance, Directive, VNode } from \'vue\'')
   writeLine(contents, 'import { ComponentConstructor, GlobalComponentConstructor } from \'./ts-helpers\'')
   writeLine(contents)
   writeLine(quasarTypeContents, 'export as namespace quasar')
@@ -304,9 +311,11 @@ function getIndexDts (apis) {
   writeLine(quasarTypeContents, 'export * from \'./lang\'')
   writeLine(quasarTypeContents, 'export * from \'./api\'')
   writeLine(quasarTypeContents, 'export * from \'./plugin\'')
+  writeLine(quasarTypeContents, 'export * from \'./config\'')
   writeLine(quasarTypeContents)
 
   const injections = {}
+  const quasarConfOptions = []
 
   apis.forEach(data => {
     const content = data.api
@@ -316,6 +325,18 @@ function getIndexDts (apis) {
     const typeValue = `${ extendsVue ? `ComponentConstructor<${ typeName }>` : typeName }`
     // Add Type to the appropriate section of types
     const propTypeDef = `${ typeName }?: ${ typeValue }`
+
+    if (content.quasarConfOptions) {
+      const confOptions = content.quasarConfOptions
+
+      const definition = getPropDefinition({
+        name: confOptions.propName,
+        definition: confOptions
+      })
+
+      quasarConfOptions.push(definition)
+    }
+
     if (content.type === 'component') {
       write(components, propTypeDef)
 
@@ -326,10 +347,62 @@ function getIndexDts (apis) {
       })
     }
     else if (content.type === 'directive') {
-      write(directives, propTypeDef)
+      // If it's a function, make all params required (1-level deep) since function values are working as callbacks
+      content.value.params = transformObject(content.value.params, makeRequired)
+
+      const valueType = getTypeVal(content.value)
+
+      const directiveValueType = `${ typeName }Value`
+      const argComments = content.arg ? [
+        ' * Directive argument:',
+        ' *  - type: ' + getTypeVal(content.arg),
+        ...(content.arg.default ? [ ' *  - default: ' + content.arg.default ] : []),
+        ' *  - description: ' + content.arg.desc,
+        ' *  - examples:',
+        ...content.arg.examples.map(example => ' *    - ' + example),
+        ' *'
+      ] : []
+      const modifiersComments = content.modifiers ? [
+        ' * Modifiers:',
+        ...Object.entries(content.modifiers).map(([ name, modifier ]) => [
+          ' *  - ' + name + ':',
+          ' *    - type: ' + getTypeVal(modifier),
+          ' *    - description: ' + modifier.desc,
+          ...(modifier.examples && modifier.examples.length > 0 ? [
+            ' *    - examples:',
+            ...modifier.examples.map(example => ' *      - ' + example)
+          ] : [])
+        ].join('\n')),
+        ' *'
+      ] : []
+      const getComments = (withExtra) => [
+        '/**',
+        ` * ${ content.value.desc }`,
+        ' *',
+        ...(withExtra ? [ ...argComments, ...modifiersComments ] : []),
+        ` * @see ${ content.meta.docsUrl }`,
+        ' */'
+      ].join('\n')
+
+      // We don't need the comments for args and modifiers in the value type
+      write(contents, getComments(false) + '\n')
+      writeLine(contents, `export type ${ directiveValueType } = ${ valueType }`)
+
+      const comments = getComments(true)
+
+      write(contents, comments + '\n')
+      writeLine(contents, `export type ${ typeName } = Directive<any, ${ directiveValueType }>`)
+
+      write(directives, comments)
+      writeLine(directives, `v${ typeName }: ${ typeValue }`)
+
+      // Nothing else to do for directives
+      return
     }
     else if (content.type === 'plugin') {
-      write(plugins, propTypeDef)
+      if (content.internal !== true) {
+        write(plugins, propTypeDef)
+      }
 
       const makeRequiredRecursive = (definition) => transformObject(definition, (prop) => {
         makeRequired(prop)
@@ -358,7 +431,9 @@ function getIndexDts (apis) {
     })
 
     // Declare class
-    writeLine(quasarTypeContents, `export const ${ typeName }: ${ typeValue }`)
+    if (content.internal !== true) {
+      writeLine(quasarTypeContents, `export const ${ typeName }: ${ typeValue }`)
+    }
 
     if (content.events) {
       for (const [ name, definition ] of Object.entries(content.events)) {
@@ -443,7 +518,7 @@ function getIndexDts (apis) {
 
       writeLine(contents, `export interface ${ typeName } extends ComponentPublicInstance<${ propsTypeName }> {`)
     }
-    else {
+    else if (content.internal !== true) {
       writeLine(contents, `export interface ${ typeName } {`)
 
       // Write props to the body directly
@@ -464,8 +539,10 @@ function getIndexDts (apis) {
     }
 
     // Close class declaration
-    writeLine(contents, '}')
-    writeLine(contents)
+    if (content.internal !== true) {
+      writeLine(contents, '}')
+      writeLine(contents)
+    }
 
     // Copy Injections for type declaration
     if (content.type === 'plugin' && content.injection) {
@@ -529,6 +606,14 @@ function getIndexDts (apis) {
     writeLine(contents, `${ key }: ${ getSafeInjectionKey(key) }VueGlobals`, 2)
   }
 
+  // The only way Volar offers until a related feature is implemented in Vue itself is to use the approach below.
+  // See: https://github.com/vuejs/language-tools/issues/465#issuecomment-1229166260
+  // See: https://github.com/vuejs/core/pull/3399
+  writeLine(contents)
+  writeLine(contents, '// Directives', 2)
+  writeLine(contents)
+  writeLines(contents, directives.join('\n'), 2)
+
   writeLine(contents, '}', 1)
   writeLine(contents, '}')
   writeLine(contents)
@@ -542,6 +627,11 @@ function getIndexDts (apis) {
   }
 
   writeLine(contents, '}', 1)
+  writeLine(contents, '}')
+  writeLine(contents)
+
+  writeLine(contents, 'declare module \'./config.d.ts\' {')
+  writeInterface(contents, 'QuasarUIConfiguration', quasarConfOptions)
   writeLine(contents, '}')
   writeLine(contents)
 
